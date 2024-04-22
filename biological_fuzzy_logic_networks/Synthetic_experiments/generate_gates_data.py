@@ -129,8 +129,12 @@ def repeated_data_generation(
                 test_size=test_size,
             )
 
+            model_state_dict, model_gate_dict = model.get_checkpoint(save_gates=True)
             torch.save(
-                {"model_state_dict": model.get_checkpoint()},
+                {
+                    "model_state_dict": model_state_dict,
+                    "model_gate_dict": model_gate_dict,
+                },
                 f"{exp_dir}model_for_simulation.pt",
             )
 

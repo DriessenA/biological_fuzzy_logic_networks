@@ -21,6 +21,9 @@ def load_data(exp_dir: str, val_frac: float):
     test_input_df = pd.read_csv(f"{exp_dir}test_input.csv")
     test_true_df = pd.read_csv(f"{exp_dir}test_true.csv")
 
+    # Simulation model checkpoint
+    bfn_ckpt = torch.load(f"{exp_dir}model_for_simulation.pt")
+
     test_size = len(test_true_df)
     test_input_dict = {
         c: torch.Tensor(np.array(test_input_df[c])) for c in test_input_df.columns
@@ -74,6 +77,7 @@ def load_data(exp_dir: str, val_frac: float):
         test_input_dict,
         test_dict,
         test_inhibitors,
+        bfn_ckpt,
     )
 
 
@@ -92,9 +96,13 @@ def fit_to_data(exp_dir, pkn_path, BFN_training_params, val_frac):
         test_input_dict,
         test_dict,
         test_inhibitors,
+        bfn_checkpoint,
     ) = load_data(exp_dir=exp_dir, val_frac=val_frac)
 
     bfn = DREAMBioFuzzNet.build_DREAMBioFuzzNet_from_file(pkn_path)
+    bfn.load_from_checkpoint(
+        bfn_checkpoint["model_state_dict"], bfn_checkpoint["model_gate_dict"]
+    )
     bmn = DREAMBioMixNet.build_DREAMBioMixNet_from_file(pkn_path)
 
     # Setup gates for BioMixNet
@@ -154,9 +162,9 @@ def repeated_gate_learning(
             val_frac=val_frac,
             BFN_training_params=BFN_training_params,
         )
-        state_dict, gate_dict = bmn.get_checkpoint()
+        model_state_dict, model_gate_dict = bmn.get_checkpoint(save_gates=True)
         torch.save(
-            {"model_state_dict": state_dict, "model_gate_dict": gate_dict},
+            {"model_state_dict": model_state_dict, "model_gate_dict": model_gate_dict},
             f"{exp_dir}model_for_prediction.pt",
         )
         parameters_opt, n_opt, K_opt = utils.obtain_params(bmn)

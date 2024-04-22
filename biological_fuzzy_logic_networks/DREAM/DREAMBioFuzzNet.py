@@ -666,20 +666,6 @@ class DREAMMixIn:
                         best_model_state = module_of_edges.state_dict()
                         best_optimizer_state = optim.state_dict()
 
-                        # torch.save(
-                        #     {
-                        #         "epoch": e,
-                        #         "model_state_dict": best_model_state,
-                        #         "optimizer_state_dict": best_optimizer_state,
-                        #         "loss": valid_loss,
-                        #     },
-                        #     f"{checkpoint_path}model.pt",
-                        # )
-
-                        # pred_df = pd.DataFrame(
-                        #     {k: v.numpy() for k, v in predictions.items()}
-                        # )
-                        # pred_df.to_csv(f"{checkpoint_path}predictions_with_model.csv")
                 else:
                     early_stopping_count += 1
 
@@ -729,7 +715,7 @@ class DREAMMixIn:
         else:
             return losses, curr_best_val_loss, None
 
-    def load_from_checkpoint(self, model_state_dict):
+    def load_from_checkpoint(self, model_state_dict, model_gate_dict=None):
         module_dict = torch.nn.ModuleDict(
             {
                 f"{edge[0]}@@@{edge[1]}": self.edges()[edge]["layer"]
@@ -743,7 +729,13 @@ class DREAMMixIn:
         }
         nx.set_edge_attributes(self, edge_att)
 
-    def get_checkpoint(self):
+        if model_gate_dict is not None:
+            for node in model_gate_dict.keys():
+                self.nodes()[node]["node_type"] = model_gate_dict[node]["node_type"]
+                if "gate" in model_gate_dict[node].keys():
+                    self.nodes()[node]["gate"] = model_gate_dict[node]["gate"]
+
+    def get_checkpoint(self, save_gates: bool = False):
         module_of_edges = torch.nn.ModuleDict(
             {
                 f"{edge[0]}@@@{edge[1]}": self.edges()[edge]["layer"]
@@ -753,7 +745,16 @@ class DREAMMixIn:
 
         model_state_dict = module_of_edges.state_dict()
 
-        return model_state_dict
+        if save_gates:
+            model_gate_dict = {}
+            for node in self.nodes:
+                model_gate_dict[node] = {}
+                model_gate_dict[node]["node_type"] = self.nodes()[node]["node_type"]
+                if "gate" in self.nodes()[node].keys():
+                    model_gate_dict[node]["gate"] = self.nodes()[node]["gate"]
+            return model_state_dict, model_gate_dict
+        else:
+            return model_state_dict
 
 
 class DREAMBioFuzzNet(DREAMMixIn, BioFuzzNet):
@@ -1164,44 +1165,6 @@ class DREAMBioMixNet(DREAMMixIn, BioFuzzNet):
                 pred_df.to_csv(f"{checkpoint_path}predictions_with_model_save.csv")
 
         return losses, curr_best_val_loss
-
-    def load_from_checkpoint(self, model_state_dict, model_gate_dict):
-        module_dict = torch.nn.ModuleDict(
-            {
-                f"{edge[0]}@@@{edge[1]}": self.edges()[edge]["layer"]
-                for edge in self.transfer_edges
-            }
-        )
-        module_dict.load_state_dict(model_state_dict)
-        edge_att = {
-            (k.split("@@@")[0], k.split("@@@")[1]): {"layer": v}
-            for k, v in module_dict.items()
-        }
-        nx.set_edge_attributes(self, edge_att)
-
-        for node in model_gate_dict.keys():
-            self.nodes()[node]["node_type"] = model_gate_dict[node]["node_type"]
-            if "gate" in model_gate_dict[node].keys():
-                self.nodes()[node]["gate"] = model_gate_dict[node]["gate"]
-
-    def get_checkpoint(self):
-        module_of_edges = torch.nn.ModuleDict(
-            {
-                f"{edge[0]}@@@{edge[1]}": self.edges()[edge]["layer"]
-                for edge in self.transfer_edges
-            }
-        )
-
-        model_state_dict = module_of_edges.state_dict()
-
-        model_gate_dict = {}
-        for node in self.nodes:
-            model_gate_dict[node] = {}
-            model_gate_dict[node]["node_type"] = self.nodes()[node]["node_type"]
-            if "gate" in self.nodes()[node].keys():
-                model_gate_dict[node]["gate"] = self.nodes()[node]["gate"]
-
-        return model_state_dict, model_gate_dict
 
 
 class DREAMMixedGate(torch.nn.Module):

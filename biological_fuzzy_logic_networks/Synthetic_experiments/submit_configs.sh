@@ -12,8 +12,12 @@ echo $CONDA_DEFAULT_ENV
 #     done
 
 
-for n_gates in {0..22}
-    do 
-        # echo ${n_gates}
-        jbsub -q x86_6h -cores 1+1 -mem 50g python /u/adr/Code/biological_fuzzy_logic_networks/biological_fuzzy_logic_networks/Synthetic_experiments/learn_gates.py /u/adr/Code/biological_fuzzy_logic_networks/biological_fuzzy_logic_networks/Synthetic_experiments/base_gate_config.json --n_gates $n_gates
-    done
+# for n_gates in {0..22}
+#     do 
+#         # echo ${n_gates}
+#         jbsub -q x86_6h -cores 1+1 -mem 50g python /u/adr/Code/biological_fuzzy_logic_networks/biological_fuzzy_logic_networks/Synthetic_experiments/learn_gates.py /u/adr/Code/biological_fuzzy_logic_networks/biological_fuzzy_logic_networks/Synthetic_experiments/base_gate_config.json --n_gates $n_gates
+#     done
+
+datadir=/dccstor/ipc1/CAR/BFN/Data/CNoRFuzzy/
+outdir=/dccstor/ipc1/CAR/BFN/Model/CNoRFuzzy/
+jbsub -q x86_24h -mem 50g python /u/adr/Code/biological_fuzzy_logic_networks/biological_fuzzy_logic_networks/Synthetic_experiments/CNoRFuzzy_data_CV.py --model ${datadir}optimised_structure_DREAM_reduced.sif --data ${datadir}simulated_data_DREAM_reduced.csv --foldnum 100 --type fuzz --outputfolder $outdir --epochs 700  --learningrate 0.002 --batchsize 3 --rounds 1
