@@ -111,9 +111,8 @@ def MSE_loss(predictions: dict, ground_truth: dict) -> torch.Tensor:
         - a torch.tensor containing the minibatch MSE loss over all observed nodes in ground_truth
     """
     # Remove unobserved nodes from the prediction
-    predictions = {
-        key: predictions[key] for key in predictions.keys() if key in ground_truth
-    }
+    # And reorder the predictions to be in the same order as the ground truth
+    predictions = {key: predictions[key] for key in ground_truth.keys()}
 
     # Get the matrices
     predictions = dictionnary_to_tensor(predictions)
