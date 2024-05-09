@@ -15,6 +15,17 @@ default_hex = [
     "#C84A8D",  # Pink
 ]
 
+default_colors = {
+    "darkblue": "#0072B2",
+    "blue": "#004D40",
+    "orange": "#D55E00",
+    "yellow": "#F0E442",
+    "lightblue": "#56B4E9",
+    "green": "#5BD527",
+    "purple": "#933CEE",
+    "pink": "#C84A8D",
+}
+
 perturbation_models_dict = {
     "student_division_same_input": "#F0E442",  # Yellow
     "student_division_random_input": "#D55E00",  # Orange
