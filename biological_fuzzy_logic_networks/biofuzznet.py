@@ -776,7 +776,8 @@ class BioFuzzNet(DiGraph):
         # Train the model
         losses = pd.DataFrame(columns=["time", "loss", "phase"])
 
-        for e in tqdm(range(epochs)):
+        epoch_pbar = tqdm(range(epochs), desc="Valid loss=?.??e??")
+        for e in epoch_pbar:
             # Instantiate the model
             self.initialise_random_truth_and_output(batch_size)
 
@@ -818,6 +819,7 @@ class BioFuzzNet(DiGraph):
                     ],
                     ignore_index=True,
                 )
+
             with torch.no_grad():
                 # Instantiate the model
                 self.initialise_random_truth_and_output(
@@ -847,5 +849,6 @@ class BioFuzzNet(DiGraph):
                     ],
                     ignore_index=True,
                 )
+            epoch_pbar.set_description(f"Valid loss:{test_loss.detach().item():.2e}")
 
         return losses
