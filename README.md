@@ -15,9 +15,7 @@ Using a virtual environment for all commands in this guide is strongly recommend
 ```sh
 pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
-pip install -r dev_requirements.txt
 pip install -e .
-pre-commit install
 ```
 
 ## Usage
