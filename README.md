@@ -8,12 +8,10 @@ Using a virtual environment for all commands in this guide is strongly recommend
 ## Installation
 
 ### Package installation
-```sh
-# assuming you have an SSH key set up on GitHub
-pip install "git+ssh://git@github.com/ibm/biological_fuzzy_logic_networks.git@main"
-```
+1. Create virtual environment with python 3.10
+2. Clone package
+3. Go into package directory
 
-### Suggested setup for development
 ```sh
 pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
