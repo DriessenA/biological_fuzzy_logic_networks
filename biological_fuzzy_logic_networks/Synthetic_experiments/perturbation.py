@@ -1,13 +1,15 @@
 from biological_fuzzy_logic_networks.DREAM import DREAMBioFuzzNet
-from biological_fuzzy_logic_networks.DREAM_analysis.train_network import get_environ_var
-from app_tunnel.apps import mlflow_tunnel
+
+# from biological_fuzzy_logic_networks.DREAM_analysis.train_network import get_environ_var
+# from app_tunnel.apps import mlflow_tunnel
 
 import torch
 import numpy as np
 import pandas as pd
 import json
 import click
-import mlflow
+
+# import mlflow
 
 
 def run_sim_and_baselines(
@@ -43,11 +45,11 @@ def run_sim_and_baselines(
     perturb_inhibition[inhibited_node] = torch.Tensor([divide_inhibition] * test_size)
 
     # Generate training data without perturbation
-    teacher_network.initialise_random_truth_and_output(train_size)
-    teacher_network.sequential_update(
-        teacher_network.root_nodes, inhibition=no_inhibition
-    )
     with torch.no_grad():
+        teacher_network.initialise_random_truth_and_output(train_size)
+        teacher_network.sequential_update(
+            teacher_network.root_nodes, inhibition=no_inhibition
+        )
         true_unperturbed_data = {
             k: v.numpy()
             for k, v in teacher_network.output_states.items()
@@ -65,11 +67,11 @@ def run_sim_and_baselines(
     input_df = pd.DataFrame(input_data)
 
     # Generate test data without perturbation
-    teacher_network.initialise_random_truth_and_output(test_size)
-    teacher_network.sequential_update(
-        teacher_network.root_nodes, inhibition=no_inhibition_test
-    )
     with torch.no_grad():
+        teacher_network.initialise_random_truth_and_output(test_size)
+        teacher_network.sequential_update(
+            teacher_network.root_nodes, inhibition=no_inhibition_test
+        )
         test_data = {
             k: v
             for k, v in teacher_network.output_states.items()
@@ -94,10 +96,10 @@ def run_sim_and_baselines(
             )
 
     # Generate test data with perturbation
-    teacher_network.sequential_update(
-        teacher_network.root_nodes, inhibition=no_inhibition_test
-    )
     with torch.no_grad():
+        teacher_network.sequential_update(
+            teacher_network.root_nodes, inhibition=no_inhibition_test
+        )
         perturb_data = {
             k: v
             for k, v in teacher_network.output_states.items()
@@ -156,10 +158,10 @@ def run_sim_and_baselines(
             teacher_network.edges[e]["layer"].K = original_params[counter]
             counter += 1
 
-    teacher_network.sequential_update(
-        teacher_network.root_nodes, inhibition=perturb_inhibition
-    )
     with torch.no_grad():
+        teacher_network.sequential_update(
+            teacher_network.root_nodes, inhibition=perturb_inhibition
+        )
         true_with_i_data = {
             k: v.numpy()
             for k, v in teacher_network.output_states.items()
@@ -168,11 +170,11 @@ def run_sim_and_baselines(
         teach_div_perturb_with_i = pd.DataFrame(true_with_i_data)
 
     # TEACHER network with division inhibition (K back to original), random inputs
-    teacher_network.initialise_random_truth_and_output(test_size)
-    teacher_network.sequential_update(
-        teacher_network.root_nodes, inhibition=perturb_inhibition
-    )
     with torch.no_grad():
+        teacher_network.initialise_random_truth_and_output(test_size)
+        teacher_network.sequential_update(
+            teacher_network.root_nodes, inhibition=perturb_inhibition
+        )
         true_wo_i_data = {
             k: v.numpy()
             for k, v in teacher_network.output_states.items()
@@ -183,13 +185,14 @@ def run_sim_and_baselines(
     # TEST student without perturbation, same inputs
     test_ground_truth = test_input.copy()
     test_ground_truth.update(test_data)
-    student_network.initialise_random_truth_and_output(test_size)
-    student_network.set_network_ground_truth(test_ground_truth)
 
-    student_network.sequential_update(
-        teacher_network.root_nodes, inhibition=no_inhibition_test
-    )
     with torch.no_grad():
+        student_network.initialise_random_truth_and_output(test_size)
+        student_network.set_network_ground_truth(test_ground_truth)
+        student_network.sequential_update(
+            teacher_network.root_nodes, inhibition=no_inhibition_test
+        )
+
         test_output = {
             k: v
             for k, v in student_network.output_states.items()
@@ -198,11 +201,12 @@ def run_sim_and_baselines(
         test_output_df = pd.DataFrame({k: v.numpy() for k, v in test_output.items()})
 
     # TEST student network without perturbation, random inputs
-    student_network.initialise_random_truth_and_output(test_size)
-    student_network.sequential_update(
-        teacher_network.root_nodes, inhibition=no_inhibition_test
-    )
     with torch.no_grad():
+        student_network.initialise_random_truth_and_output(test_size)
+        student_network.sequential_update(
+            teacher_network.root_nodes, inhibition=no_inhibition_test
+        )
+
         test_random_output = {
             k: v
             for k, v in student_network.output_states.items()
@@ -216,13 +220,13 @@ def run_sim_and_baselines(
     perturb_ground_truth = perturb_input.copy()
     perturb_ground_truth.update(perturb_data)
 
-    student_network.initialise_random_truth_and_output(test_size)
-    student_network.set_network_ground_truth(perturb_ground_truth)
-
-    student_network.sequential_update(
-        teacher_network.root_nodes, inhibition=perturb_inhibition
-    )
     with torch.no_grad():
+        student_network.initialise_random_truth_and_output(test_size)
+        student_network.set_network_ground_truth(perturb_ground_truth)
+        student_network.sequential_update(
+            teacher_network.root_nodes, inhibition=perturb_inhibition
+        )
+
         perturb_output = {
             k: v
             for k, v in student_network.output_states.items()
@@ -233,11 +237,11 @@ def run_sim_and_baselines(
         )
 
     # TEST student network with perturbation, random inputs
-    untrained_network.initialise_random_truth_and_output(test_size)
-    untrained_network.sequential_update(
-        untrained_network.root_nodes, inhibition=perturb_inhibition
-    )
     with torch.no_grad():
+        untrained_network.initialise_random_truth_and_output(test_size)
+        untrained_network.sequential_update(
+            untrained_network.root_nodes, inhibition=perturb_inhibition
+        )
         perturb_gen = {
             k: v.numpy()
             for k, v in untrained_network.output_states.items()
@@ -246,12 +250,12 @@ def run_sim_and_baselines(
         perturb_gen_df = pd.DataFrame(perturb_gen)
 
     # UNTRAINED NETWORK on perturbation, same inputs
-    untrained_network.initialise_random_truth_and_output(test_size)
-    untrained_network.set_network_ground_truth(perturb_ground_truth)
-    untrained_network.sequential_update(
-        teacher_network.root_nodes, inhibition=perturb_inhibition
-    )
     with torch.no_grad():
+        untrained_network.initialise_random_truth_and_output(test_size)
+        untrained_network.set_network_ground_truth(perturb_ground_truth)
+        untrained_network.sequential_update(
+            teacher_network.root_nodes, inhibition=perturb_inhibition
+        )
         ut_perturb_with_input = {
             k: v.numpy()
             for k, v in untrained_network.output_states.items()
@@ -260,11 +264,11 @@ def run_sim_and_baselines(
         ut_perturb_with_input_df = pd.DataFrame(ut_perturb_with_input)
 
     # UNTRAINED NETWORK on perturbation, random inputs
-    untrained_network.initialise_random_truth_and_output(test_size)
-    untrained_network.sequential_update(
-        untrained_network.root_nodes, inhibition=perturb_inhibition
-    )
     with torch.no_grad():
+        untrained_network.initialise_random_truth_and_output(test_size)
+        untrained_network.sequential_update(
+            untrained_network.root_nodes, inhibition=perturb_inhibition
+        )
         ut_perturb = {
             k: v.numpy()
             for k, v in untrained_network.output_states.items()
@@ -274,12 +278,12 @@ def run_sim_and_baselines(
         ut_perturb_df = pd.DataFrame(ut_perturb)
 
     # UNTRAINED NETWORK without perturbation, same inputs
-    untrained_network.initialise_random_truth_and_output(test_size)
-    untrained_network.set_network_ground_truth(test_ground_truth)
-    untrained_network.sequential_update(
-        untrained_network.root_nodes, inhibition=no_inhibition_test
-    )
     with torch.no_grad():
+        untrained_network.initialise_random_truth_and_output(test_size)
+        untrained_network.set_network_ground_truth(test_ground_truth)
+        untrained_network.sequential_update(
+            untrained_network.root_nodes, inhibition=no_inhibition_test
+        )
         gen_with_i_test = {
             k: v.numpy()
             for k, v in untrained_network.output_states.items()
@@ -288,11 +292,11 @@ def run_sim_and_baselines(
         ut_test_with_i_df = pd.DataFrame(gen_with_i_test)
 
     # UNTRAINED NETWORK without perturbation, random inputs
-    untrained_network.initialise_random_truth_and_output(test_size)
-    untrained_network.sequential_update(
-        untrained_network.root_nodes, inhibition=no_inhibition_test
-    )
     with torch.no_grad():
+        untrained_network.initialise_random_truth_and_output(test_size)
+        untrained_network.sequential_update(
+            untrained_network.root_nodes, inhibition=no_inhibition_test
+        )
         gen_test = {
             k: v.numpy()
             for k, v in untrained_network.output_states.items()
@@ -353,17 +357,6 @@ def main(config_path):
     with open(config_path) as f:
         config = json.load(f)
     f.close()
-
-    with mlflow_tunnel(host="mlflow") as tunnel:
-        remote_port = tunnel[5000]
-        mlflow.set_tracking_uri(f"http://localhost:{remote_port}")
-        mlflow.set_experiment(config["experiment_name"])
-
-        job_id = get_environ_var("LSB_JOBID", fail_gracefully=True)
-        mlflow.log_param("ccc_job_id", job_id)
-
-        log_params = {x: y for x, y in config.items() if len(str(y)) < 500}
-        mlflow.log_params(log_params)
 
     losses, pertubed_data, unpertubed_data, student, teacher = run_sim_and_baselines(
         **config

@@ -1,0 +1,15 @@
+{
+    "pkn_path" : "/dccstor/ipc1/CAR/BFN/LiverDREAM_PKN.sif",
+    "out_dir": "/dccstor/ipc1/CAR/BFN/Model/Gates/",
+    "train_size": 10000,
+    "test_size":2000,
+    "val_frac": 0.3,
+    "n_max_gates": 22,
+    "seed": 1234,
+    "n_repeats": 5,
+    "BFN_training_params": {
+        "epochs": 500,
+        "batch_size": 500,
+        "learning_rate": 0.001,
+        "tensors_to_cuda": true
+        }}

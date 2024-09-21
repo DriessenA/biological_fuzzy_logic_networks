@@ -2,11 +2,11 @@
     "pkn_path" : "/dccstor/ipc1/CAR/BFN/LiverDREAM_PKN.sif",
     "train_size": 10000,
     "test_size": 1000,
-    "k_inhibition":  5.0,
+    "k_inhibition":  -1e6,
     "divide_inhibition": 10.0,
     "train_frac": 0.7,
     "BFN_training_params": {
-        "epochs": 100,
+        "epochs": 500,
         "batch_size": 500,
         "learning_rate": 0.001,
         "tensors_to_cuda": false

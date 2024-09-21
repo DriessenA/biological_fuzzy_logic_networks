@@ -33,7 +33,7 @@ class BioFuzzNet(DiGraph):
     """This class represents a BioFuzzNet, that is a Boolean biological network
     on which fuzzy logic operations can be implemented."""
 
-    def __init__(self, nodes=None, edges=None):
+    def __init__(self, nodes=None, edges=None, n=2, K=0.5):
         """
         Initialise a BioFuzzNet.
         Logical AND gates should be defined in the nodes and edges list, by having a node name
@@ -74,7 +74,7 @@ class BioFuzzNet(DiGraph):
                     self.add_negative_edge(edge, not_count)
                 else:
                     if self.nodes()[edge[0]]["node_type"] == "biological":
-                        self.add_transfer_edge(edge[0], edge[1])
+                        self.add_transfer_edge(edge[0], edge[1], n=n, K=K)
                     else:
                         self.add_simple_edge(edge[0], edge[1])
 
@@ -96,7 +96,7 @@ class BioFuzzNet(DiGraph):
             if attributes["node_type"] == "biological"
         ]
         return biological_nodes
-    
+
     @property
     def fuzzy_nodes(self):
         """Return a list containing the names of the fuzzy nodes."""
@@ -106,8 +106,6 @@ class BioFuzzNet(DiGraph):
             if attributes["node_type"] in ["logic_gate_AND", "logic_gate_OR"]
         ]
         return fuzzy_nodes
-    
-
 
     @property
     def root_nodes(self):
@@ -186,6 +184,8 @@ class BioFuzzNet(DiGraph):
         self,
         upstream_node: str,
         downstream_node: str,
+        K=0.5,
+        n=2,
     ) -> None:
         """
         Add transfer directed edge (with a Hill transfer function) to the network
@@ -216,7 +216,7 @@ class BioFuzzNet(DiGraph):
             upstream_node,
             downstream_node,
             edge_type="transfer_function",
-            layer=HillTransferFunction(),
+            layer=HillTransferFunction(K=K, n=n),
             weight=1,
         )
 
@@ -315,7 +315,7 @@ class BioFuzzNet(DiGraph):
                 )
 
     @classmethod
-    def build_BioFuzzNet_from_file(cls, filepath: str):
+    def build_BioFuzzNet_from_file(cls, filepath: str, n=2, K=0.5):
         """
         An alternate constructor to build the BioFuzzNet from the sif file instead of the lists of nodes and edges.
         AND gates should already be specified in the sif file, and should be named node1_and_node2 where node1 and node2 are the incoming nodes
@@ -327,7 +327,7 @@ class BioFuzzNet(DiGraph):
 
         """
         nodes, edges = read_sif(filepath)
-        return BioFuzzNet(nodes, edges)
+        return BioFuzzNet(nodes, edges, n=n, K=K)
 
     # Setter Methods
     def initialise_random_truth_and_output(self, batch_size):
@@ -778,7 +778,8 @@ class BioFuzzNet(DiGraph):
         # Train the model
         losses = pd.DataFrame(columns=["time", "loss", "phase"])
 
-        for e in tqdm(range(epochs)):
+        epoch_pbar = tqdm(range(epochs), desc="Valid loss=?.??e??")
+        for e in epoch_pbar:
             # Instantiate the model
             self.initialise_random_truth_and_output(batch_size)
 
@@ -820,6 +821,7 @@ class BioFuzzNet(DiGraph):
                     ],
                     ignore_index=True,
                 )
+
             with torch.no_grad():
                 # Instantiate the model
                 self.initialise_random_truth_and_output(
@@ -849,5 +851,6 @@ class BioFuzzNet(DiGraph):
                     ],
                     ignore_index=True,
                 )
+            epoch_pbar.set_description(f"Valid loss:{test_loss.detach().item():.2e}")
 
         return losses

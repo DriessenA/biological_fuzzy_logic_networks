@@ -1,11 +1,10 @@
 from biological_fuzzy_logic_networks.DREAM_analysis.utils import (
-    create_bfz,
     prepare_cell_line_data,
     cl_data_to_input,
 )
+from biological_fuzzy_logic_networks.DREAM.DREAMBioFuzzNet import DREAMBioFuzzNet
 import pandas as pd
 from typing import List, Union, Sequence
-from app_tunnel.apps import mlflow_tunnel
 from sklearn.metrics import r2_score
 import mlflow
 import click
@@ -13,6 +12,8 @@ import json
 import torch
 import pickle as pickle
 import os
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def get_environ_var(env_var_name, fail_gracefully=True):
@@ -64,9 +65,10 @@ def train_network(
     checkpoint_path: str = None,
     convergence_check: bool = False,
     shuffle_nodes: bool = False,
+    patience: int = 20,
     **extras,
 ):
-    model = create_bfz(pkn_sif, network_class, shuffle_nodes=shuffle_nodes)
+    model = DREAMBioFuzzNet.build_DREAMBioFuzzNet_from_file(pkn_sif)
     cl_data = prepare_cell_line_data(
         data_file=data_file,
         time_point=time_point,
@@ -118,10 +120,17 @@ def train_network(
         checkpoint_path=checkpoint_path,
         convergence_check=convergence_check,
         logger=mlflow,
+        patience=patience,
     )
 
     print("loss: ", loss)
     print("best loss: ", best_val_loss)
+
+    with open(f"{output_dir}scaler.pkl", "wb") as f:
+        pickle.dump(scaler, f)
+    loss.to_csv(f"{output_dir}loss.csv")
+    train.to_csv(f"{output_dir}train_data.csv")
+    valid.to_csv(f"{output_dir}valid_data.csv")
 
     if convergence_check:
         temp = {
@@ -136,15 +145,18 @@ def train_network(
         loop_states_to_save.to_csv(f"{output_dir}loop_states.csv")
 
     # Load best model and evaluate:
-    ckpt = torch.load(f"{checkpoint_path}/model.pt")
-    model = create_bfz(pkn_sif, network_class)
+    valid_inhibitors = {k: v.to(device) for k, v in valid_inhibitors.items()}
+    ckpt = torch.load(f"{checkpoint_path}/model.pt", map_location=torch.device(device))
+    model = DREAMBioFuzzNet.build_DREAMBioFuzzNet_from_file(pkn_sif)
     model.load_from_checkpoint(ckpt["model_state_dict"])
+
     with torch.no_grad():
         model.initialise_random_truth_and_output(len(valid))
         model.set_network_ground_truth(valid_data)
+        print(model.output_states)
         model.sequential_update(model.root_nodes, valid_inhibitors)
         val_output_states = pd.DataFrame(
-            {k: v.numpy() for k, v in model.output_states.items()}
+            {k: v.cpu().numpy() for k, v in model.output_states.items()}
         )
 
     # Vaidation performance
@@ -157,14 +169,11 @@ def train_network(
     # mlflow.log_metrics(node_r2_scores)
 
     # Save outputs
-    with open(f"{output_dir}scaler.pkl", "wb") as f:
-        pickle.dump(scaler, f)
-    val_output_states.to_csv(f"{output_dir}valid_output_states.csv")
-    loss.to_csv(f"{output_dir}loss.csv")
-    train.to_csv(f"{output_dir}train_data.csv")
-    valid.to_csv(f"{output_dir}valid_data.csv")
+    train_inhibitors = {k: v.to("cpu") for k, v in train_inhibitors.items()}
+    valid_inhibitors = {k: v.to("cpu") for k, v in valid_inhibitors.items()}
     pd.DataFrame(train_inhibitors).to_csv(f"{output_dir}train_inhibitors.csv")
     pd.DataFrame(valid_inhibitors).to_csv(f"{output_dir}valid_inhibitors.csv")
+    val_output_states.to_csv(f"{output_dir}valid_output_states.csv")
 
 
 @click.command()

@@ -1,9 +1,8 @@
-##% Imports
+# Imports
 import torch
 import argparse
 import os
 import pickle
-import sys
 from tqdm import tqdm
 import numpy as np
 
@@ -69,16 +68,16 @@ for fold in tqdm(range(10)):
     tot_num_gates = len(network_true.fuzzy_nodes)
     if not os.path.exists(f"{args.outputfolder}/CV_experiment_{fold}"):
         os.mkdir(f"{args.outputfolder}/CV_experiment_{fold}")
-        print(f"Directory {args.outputfolder}/CV_experiment_{fold} did not exist and was created")
+        print(
+            f"Directory {args.outputfolder}/CV_experiment_{fold} did not exist and was created"
+        )
     else:
         print(
             f"Directory {args.outputfolder}/CV_experiment_{fold} already exists. File will be overwritten"
         )
 
-
-
-    for num_gates in range(1, args.num_gates_max+1):
-        choices = np.random.choice(tot_num_gates, num_gates, replace = False)
+    for num_gates in range(1, args.num_gates_max + 1):
+        choices = np.random.choice(tot_num_gates, num_gates, replace=False)
         node_names = []
         gate_id = 0
         for node in network_true.fuzzy_nodes:
@@ -89,11 +88,14 @@ for fold in tqdm(range(10)):
                     network_true.nodes[node]["node_type"] = "logic_gate_OR"
                 else:
                     network_true.nodes[node]["node_type"] = "logic_gate_AND"
-            gate_id+=1
+            gate_id += 1
         print("Gates were randomly assigned.")
         pickle.dump(
             network_true,
-            open(f"{args.outputfolder}/CV_experiment_{fold}/model_structure_data_{num_gates}.p", "wb"),
+            open(
+                f"{args.outputfolder}/CV_experiment_{fold}/model_structure_data_{num_gates}.p",
+                "wb",
+            ),
         )
 
         # Set ground truth for root nodes
@@ -104,7 +106,7 @@ for fold in tqdm(range(10)):
         inputs = {
             n: network_true.nodes()[n]["output_state"] for n in network_true.root_nodes
         }
-        
+
         # Simulate
         network_true.sequential_update(network_true.root_nodes)
         # The result of the simulation will be our ground truth
@@ -119,24 +121,47 @@ for fold in tqdm(range(10)):
             key: val[args.train : args.train + args.test] for key, val in inputs.items()
         }
 
-        train_ground_truth = {key: val[0 : args.train] for key, val in ground_truth.items()}
+        train_ground_truth = {
+            key: val[0 : args.train] for key, val in ground_truth.items()
+        }
         test_ground_truth = {
             key: val[args.train : args.train + args.test]
             for key, val in ground_truth.items()
         }
 
         # Save the datasets
-        pickle.dump(train_input, open(f"{args.outputfolder}/CV_experiment_{fold}/train_input_{num_gates}.p", "wb"))
-        pickle.dump(test_input, open(f"{args.outputfolder}/CV_experiment_{fold}/test_input_{num_gates}.p", "wb"))
+        pickle.dump(
+            train_input,
+            open(
+                f"{args.outputfolder}/CV_experiment_{fold}/train_input_{num_gates}.p",
+                "wb",
+            ),
+        )
+        pickle.dump(
+            test_input,
+            open(
+                f"{args.outputfolder}/CV_experiment_{fold}/test_input_{num_gates}.p",
+                "wb",
+            ),
+        )
         pickle.dump(
             train_ground_truth,
-            open(f"{args.outputfolder}/CV_experiment_{fold}/train_ground_truth_{num_gates}.p", "wb"),
+            open(
+                f"{args.outputfolder}/CV_experiment_{fold}/train_ground_truth_{num_gates}.p",
+                "wb",
+            ),
         )
         pickle.dump(
             test_ground_truth,
-            open(f"{args.outputfolder}/CV_experiment_{fold}/test_ground_truth_{num_gates}.p", "wb"),
+            open(
+                f"{args.outputfolder}/CV_experiment_{fold}/test_ground_truth_{num_gates}.p",
+                "wb",
+            ),
         )
         pickle.dump(
             node_names,
-            open(f"{args.outputfolder}/CV_experiment_{fold}/node_names_{num_gates}.p", "wb"),
+            open(
+                f"{args.outputfolder}/CV_experiment_{fold}/node_names_{num_gates}.p",
+                "wb",
+            ),
         )

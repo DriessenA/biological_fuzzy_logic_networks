@@ -1,6 +1,6 @@
 {
     "pkn_path" : "/dccstor/ipc1/CAR/BFN/LiverDREAM_PKN.sif",
-    "out_dir": "/dccstor/ipc1/CAR/BFN/Model/Noise/SimData1/",
+    "out_dir": "/dccstor/ipc1/CAR/BFN/Model/Noise/SimData5/",
     "train_size": 10000,
     "test_size":2000,
     "train_frac": 0.7,

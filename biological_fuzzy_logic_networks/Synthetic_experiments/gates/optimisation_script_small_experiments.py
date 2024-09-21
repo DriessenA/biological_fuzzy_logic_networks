@@ -1,13 +1,10 @@
-##% Imports
+# Imports
 import torch
 import argparse
 import os
 import pickle
 import pandas as pd
 import seaborn as sns
-
-import sys
-
 
 import biological_fuzzy_logic_networks.biomixnet as biomixnet
 import biological_fuzzy_logic_networks.biofuzznet as biofuzznet
@@ -50,13 +47,22 @@ parser.add_argument(
     help="Relative path to the folder where the optimisation output will be saved. Should end with a backslash. Folder will be created if it does not exist",
 )
 parser.add_argument(
-    "--epochs", type=int,default=80, help="Number of epochs for optimisation. Default = 80"
+    "--epochs",
+    type=int,
+    default=80,
+    help="Number of epochs for optimisation. Default = 80",
 )
 parser.add_argument(
-    "--learningrate", type=float, default=0.05, help="Learning rate for optimisation. Default = 0.05."
+    "--learningrate",
+    type=float,
+    default=0.05,
+    help="Learning rate for optimisation. Default = 0.05.",
 )
 parser.add_argument(
-    "--batchsize", type=int, default=300, help="Batch size for optimisation. Default = 300."
+    "--batchsize",
+    type=int,
+    default=300,
+    help="Batch size for optimisation. Default = 300.",
 )
 
 parser.add_argument(
@@ -77,8 +83,12 @@ network_BMN = biomixnet.BioMixNet.build_BioMixNet_from_file(args.inputnetwork)
 node_names = pickle.load(open(f"{args.inputdata}node_names_{num_gates}.p", "rb"))
 train_input = pickle.load(open(f"{args.inputdata}train_input_{num_gates}.p", "rb"))
 test_input = pickle.load(open(f"{args.inputdata}test_input_{num_gates}.p", "rb"))
-train_ground_truth = pickle.load(open(f"{args.inputdata}train_ground_truth_{num_gates}.p", "rb"))
-test_ground_truth = pickle.load(open(f"{args.inputdata}test_ground_truth_{num_gates}.p", "rb"))
+train_ground_truth = pickle.load(
+    open(f"{args.inputdata}train_ground_truth_{num_gates}.p", "rb")
+)
+test_ground_truth = pickle.load(
+    open(f"{args.inputdata}test_ground_truth_{num_gates}.p", "rb")
+)
 
 # See if output folder exists
 # Create the output folder
@@ -109,7 +119,6 @@ losses_i = network_BMN.conduct_optimisation(
 losses.append(losses_i)
 
 
-
 # Concatenate the losses of the iterative runs
 all_losses = pd.concat(losses)
 all_losses.reset_index(inplace=True)
@@ -122,7 +131,9 @@ plot_fig.savefig(f"{args.outputfolder}/total_loss_{args.fold}.png")
 
 # Save the data we will need later
 parameters_opt, n_opt, K_opt = utils.obtain_params(network_BMN)
-pickle.dump(parameters_opt, open(f"{args.outputfolder}/parameters_opt_{args.fold}.p", "wb"))
+pickle.dump(
+    parameters_opt, open(f"{args.outputfolder}/parameters_opt_{args.fold}.p", "wb")
+)
 pickle.dump(network_BMN, open(f"{args.outputfolder}/model_{args.fold}.p", "wb"))
 pickle.dump(all_losses, open(f"{args.outputfolder}/losses_{args.fold}.p", "wb"))
 

@@ -20,7 +20,9 @@ param_dict = {
         "akt",
         "p38",
         "hsp27",
-    ]
+    ],
+    "k_inhibition": [-1e2, -10, -5, -1, -0.5],
+    "divide_inhibition": [10, 20, 30, 40, 50],
 }
 
 base_config_path = "/u/adr/Code/biological_fuzzy_logic_networks/biological_fuzzy_logic_networks/Synthetic_experiments/base_perturb_config.json"

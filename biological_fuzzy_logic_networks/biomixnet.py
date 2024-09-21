@@ -51,14 +51,14 @@ class BioMixNet(BioFuzzNet):
         """
         super().__init__(nodes, edges)
 
-        for node in self.nodes():
-            if self.nodes()[node]["node_type"] in ["logic_gate_AND", "logic_gate_OR"]:
-                self.nodes()[node]["node_type"] = "logic_gate_MIXED"
-                self.nodes()[node]["gate"] = MixedGate(
-                    AND_param=AND_param,
-                    AND_function=self.integrate_AND,
-                    OR_function=self.integrate_OR,
-                )
+        # for node in self.nodes():
+        #     if self.nodes()[node]["node_type"] in ["logic_gate_AND", "logic_gate_OR"]:
+        #         self.nodes()[node]["node_type"] = "logic_gate_MIXED"
+        #         self.nodes()[node]["gate"] = MixedGate(
+        #             AND_param=AND_param,
+        #             AND_function=self.integrate_AND,
+        #             OR_function=self.integrate_OR,
+        #         )
 
     def build_BioMixNet_from_file(filepath: str):
         """

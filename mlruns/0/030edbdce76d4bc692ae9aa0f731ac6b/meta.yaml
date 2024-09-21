@@ -1,0 +1,15 @@
+artifact_uri: file:///u/adr/Code/biological_fuzzy_logic_networks/mlruns/0/030edbdce76d4bc692ae9aa0f731ac6b/artifacts
+end_time: 1721310496131
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 030edbdce76d4bc692ae9aa0f731ac6b
+run_name: defiant-foal-52
+run_uuid: 030edbdce76d4bc692ae9aa0f731ac6b
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1721309247005
+status: 3
+tags: []
+user_id: adr

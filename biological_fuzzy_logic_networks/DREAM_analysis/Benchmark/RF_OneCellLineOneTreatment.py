@@ -16,10 +16,13 @@ markers_to_predict = [
     "p.CREB",
     "p.H3",
     "p.MEK",
+    "p.GSK3b",
+    "p.FAK",
 ]
 
-train_cell_lines = ["BT20"]  # train cell lines
-treatments = ["EGF", "iEGFR", "iMEK", "iPI3K", "iPKC", "imTOR"]
+
+train_cell_lines = ["MFM223"]  # train cell lines
+treatments = ["EGF"]
 test_cell_lines = []  # test cell lines
 
 # Subnetwork inputs
@@ -27,37 +30,35 @@ cont_features = [
     "p.Akt.Ser473.",
     "p.AKT.Thr308.",
     "p.AMPK",
-    "p.FAK",
-    "p.GSK3b",
     "p.SMAD23",
     "p.SRC",
+    "p.MKK4",
 ]
-
 
 data = []
 for cl in train_cell_lines + test_cell_lines:
     for tr in treatments:  # First time I loop over treatments
         cl_data = pd.read_csv(
-            f"/dccstor/ipc1/CAR/DREAM/DREAMdata/Time_aligned_per_cell_line/CL_incl_test/{cl}_{tr}_time9.csv"
+            f"/dccstor/ipc1/CAR/DREAM/DREAMdata/Time_aligned_per_cell_line/CL_incl_test/{cl}.csv"
         )
         cl_data = cl_data[cl_data["time"] == 9]
+        cl_data = cl_data[cl_data["treatment"] == tr]
 
         data.append(cl_data)
 
 data = pd.concat(data)
-
 for treatment in treatments:  # Second time I loop over treatments, whoopsie
     print(treatment)
     tr_data = data[data["treatment"] == treatment]
     train, test = train_test_split(tr_data)
 
     np.save(
-        f"/dccstor/ipc1/CAR/DREAM/Model/Baseline/RF_OneCellLineOneTreatment/RF_OneCellLine_{treatment}_train.npy",
+        f"/dccstor/ipc1/CAR/DREAM/Model/Baseline/RF_OneCellLineOneTreatment/RF_OneCellLine_{'_'.join(train_cell_lines)}_{treatment}_train.npy",
         train,
     )
 
     np.save(
-        f"/dccstor/ipc1/CAR/DREAM/Model/Baseline/RF_OneCellLineOneTreatment/RF_OneCellLine_{treatment}_test.npy",
+        f"/dccstor/ipc1/CAR/DREAM/Model/Baseline/RF_OneCellLineOneTreatment/RF_OneCellLine_{'_'.join(train_cell_lines)}_{treatment}_test.npy",
         test,
     )
 
@@ -69,7 +70,7 @@ for treatment in treatments:  # Second time I loop over treatments, whoopsie
         pred = rf.predict(test[features])
 
         np.save(
-            f"/dccstor/ipc1/CAR/DREAM/Model/Baseline/RF_OneCellLineOneTreatment/{treatment}_{marker_to_predict}.npy",
+            f"/dccstor/ipc1/CAR/DREAM/Model/Baseline/RF_OneCellLineOneTreatment/{'_'.join(train_cell_lines)}_{treatment}_{marker_to_predict}.npy",
             pred,
         )
         print(rf.score(test[features], test[marker_to_predict]))

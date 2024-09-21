@@ -37,8 +37,8 @@ class MixedGate(torch.nn.Module):
                 - x: node at which the input is computed
         """
         # x is the node at which we integrate the inputs
-        AND_value = self.AND_function(x)
-        OR_value = self.OR_function(x)
+        AND_value = self.AND_function(node=x)
+        OR_value = self.OR_function(node=x)
         output = (
             torch.sigmoid(self.AND_param) * AND_value
             + (1 - torch.sigmoid(self.AND_param)) * OR_value

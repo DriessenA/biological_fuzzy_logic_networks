@@ -6,6 +6,9 @@ import pandas as pd
 import json
 import click
 import os
+import pickle
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.linear_model import LinearRegression
 
 
 def load_and_prepare_data(
@@ -25,24 +28,20 @@ def load_and_prepare_data(
         # Add noise to training data (and test data?)
         train_input_noise = np.random.normal(0, noise_sd, train_input_df.shape)
         train_input_df = train_input_df + train_input_noise
-        train_input_df[train_input_df <= 0] = 1e-9
 
     if add_noise_to_y_train:
         # Add noise to training data (and test data?)
         train_noise = np.random.normal(0, noise_sd, train_true_df.shape)
         train_true_df = train_true_df + train_noise
-        train_true_df[train_true_df <= 0] = 1e-9
 
     if add_noise_to_input_test:
         # Add noise to test data
         input_noise = np.random.normal(0, noise_sd, test_input_df.shape)
         test_input_df = test_input_df + input_noise
-        test_input_df[test_input_df <= 0] = 1e-9
 
     if add_noise_to_y_test:
         test_noise = np.random.normal(0, noise_sd, test_true_df.shape)
         test_true_df = test_true_df + test_noise
-        test_true_df[test_true_df <= 0] = 1e-9
 
     return train_true_df, train_input_df, test_true_df, test_input_df
 
@@ -90,23 +89,46 @@ def run_train_with_noise(
     train_size = len(train)
     val_size = len(val)
 
-    train_dict = {c: torch.Tensor(np.array(train[c])) for c in train.columns}
-    val_dict = {c: torch.Tensor(np.array(val[c])) for c in val.columns}
-
     # Same input as teacher:
     train_input = train_input_df.iloc[train.index, :]
     val_input = train_input_df.drop(train.index, axis=0)
 
-    train_input_dict = {
-        c: torch.Tensor(np.array(train_input[c])) for c in train_input.columns
-    }
-    val_input_dict = {
-        c: torch.Tensor(np.array(val_input[c])) for c in val_input.columns
-    }
-
     # Data should have root nodes and non-root nodes
-    val_dict.update(val_input_dict)
-    train_dict.update(train_input_dict)
+    all_train = pd.concat([train, train_input], axis=1)
+    all_val = pd.concat([val, val_input], axis=1)
+    all_test = pd.concat([test_true_df, test_input_df], axis=1)
+
+    # Train scaler on the training data
+    scaler = MinMaxScaler()
+    all_train = pd.DataFrame(
+        scaler.fit_transform(all_train),
+        columns=all_train.columns,
+        index=all_train.index,
+    )
+
+    # Scale validation data and prepare tensors
+    all_val = pd.DataFrame(
+        scaler.transform(all_val),
+        columns=all_val.columns,
+        index=all_val.index,
+    )
+
+    all_test = pd.DataFrame(
+        scaler.transform(all_test),
+        columns=all_test.columns,
+        index=all_test.index,
+    )
+
+    all_test[all_test > 1] = 1
+    all_val[all_val > 1] = 1
+    all_train[all_train > 1] = 1
+
+    val_input_dict = {c: torch.Tensor(np.array(all_val[c])) for c in val_input.columns}
+    train_input_dict = {
+        c: torch.Tensor(np.array(all_train[c])) for c in train_input.columns
+    }
+    train_dict = {c: torch.Tensor(np.array(all_train[c])) for c in all_train.columns}
+    val_dict = {c: torch.Tensor(np.array(all_val[c])) for c in all_val.columns}
 
     # Inhibitors
     train_inhibitors = {c: torch.ones(train_size) for c in train_dict.keys()}
@@ -125,28 +147,24 @@ def run_train_with_noise(
         **BFN_training_params,
     )
 
-    # TEST student without perturbation, same inputs
     test_ground_truth = {
-        c: torch.Tensor(np.array(test_true_df[c])) for c in test_true_df.columns
+        c: torch.Tensor(np.array(all_test[c])) for c in all_test.columns
     }
-    test_input_dict = {
-        c: torch.Tensor(np.array(test_input_df[c])) for c in test_input_df.columns
-    }
-    test_ground_truth.update(test_input_dict)
-    no_inhibition_test = {k: torch.ones(test_size) for k in student_network.nodes}
-    student_network.initialise_random_truth_and_output(
-        test_size, to_cuda=BFN_training_params["tensors_to_cuda"]
-    )
-    student_network.set_network_ground_truth(
-        test_ground_truth, to_cuda=BFN_training_params["tensors_to_cuda"]
-    )
 
-    student_network.sequential_update(
-        student_network.root_nodes,
-        inhibition=no_inhibition_test,
-        to_cuda=BFN_training_params["tensors_to_cuda"],
-    )
+    no_inhibition_test = {k: torch.ones(test_size) for k in student_network.nodes}
     with torch.no_grad():
+        student_network.initialise_random_truth_and_output(
+            test_size, to_cuda=BFN_training_params["tensors_to_cuda"]
+        )
+        student_network.set_network_ground_truth(
+            test_ground_truth, to_cuda=BFN_training_params["tensors_to_cuda"]
+        )
+
+        student_network.sequential_update(
+            student_network.root_nodes,
+            inhibition=no_inhibition_test,
+            to_cuda=BFN_training_params["tensors_to_cuda"],
+        )
         test_output = {
             k: v.cpu()
             for k, v in student_network.output_states.items()
@@ -155,15 +173,15 @@ def run_train_with_noise(
         test_output_df = pd.DataFrame({k: v.numpy() for k, v in test_output.items()})
 
     # TEST student network without perturbation, random inputs
-    student_network.initialise_random_truth_and_output(
-        test_size, to_cuda=BFN_training_params["tensors_to_cuda"]
-    )
-    student_network.sequential_update(
-        student_network.root_nodes,
-        inhibition=no_inhibition_test,
-        to_cuda=BFN_training_params["tensors_to_cuda"],
-    )
     with torch.no_grad():
+        student_network.initialise_random_truth_and_output(
+            test_size, to_cuda=BFN_training_params["tensors_to_cuda"]
+        )
+        student_network.sequential_update(
+            student_network.root_nodes,
+            inhibition=no_inhibition_test,
+            to_cuda=BFN_training_params["tensors_to_cuda"],
+        )
         test_random_output = {
             k: v.cpu()
             for k, v in student_network.output_states.items()
@@ -174,12 +192,12 @@ def run_train_with_noise(
         )
 
     # UNTRAINED NETWORK without perturbation, same inputs
-    untrained_network.initialise_random_truth_and_output(test_size)
-    untrained_network.set_network_ground_truth(test_ground_truth)
-    untrained_network.sequential_update(
-        untrained_network.root_nodes, inhibition=no_inhibition_test
-    )
     with torch.no_grad():
+        untrained_network.initialise_random_truth_and_output(test_size)
+        untrained_network.set_network_ground_truth(test_ground_truth)
+        untrained_network.sequential_update(
+            untrained_network.root_nodes, inhibition=no_inhibition_test
+        )
         gen_with_i_test = {
             k: v.cpu().numpy()
             for k, v in untrained_network.output_states.items()
@@ -188,11 +206,11 @@ def run_train_with_noise(
         ut_test_with_i_df = pd.DataFrame(gen_with_i_test)
 
     # UNTRAINED NETWORK without perturbation, random inputs
-    untrained_network.initialise_random_truth_and_output(test_size)
-    untrained_network.sequential_update(
-        untrained_network.root_nodes, inhibition=no_inhibition_test
-    )
     with torch.no_grad():
+        untrained_network.initialise_random_truth_and_output(test_size)
+        untrained_network.sequential_update(
+            untrained_network.root_nodes, inhibition=no_inhibition_test
+        )
         gen_test = {
             k: v.cpu().numpy()
             for k, v in untrained_network.output_states.items()
@@ -200,13 +218,31 @@ def run_train_with_noise(
         }
         ut_test_df = pd.DataFrame(gen_test)
 
+    # Baselines
+    lm = LinearRegression()
+    lm.fit(train_input, train)
+    lm_pred = pd.DataFrame(lm.predict(test_input_df), columns=train.columns)
+    test_random_input = {
+        k: v.cpu()
+        for k, v in student_network.output_states.items()
+        if k in student_network.root_nodes
+    }
+    test_random_input_df = pd.DataFrame(
+        {k: v.numpy() for k, v in test_random_input.items()}
+    )
+    lm_random_pred = pd.DataFrame(
+        lm.predict(test_random_input_df), columns=train.columns
+    )
+
     unpertubed_pred_data = pd.concat(
         [
-            test_true_df,
+            all_test,
             test_output_df,
             test_random_output_df,
             ut_test_with_i_df,
             ut_test_df,
+            lm_pred,
+            lm_random_pred,
         ],
         keys=[
             "teacher_true",
@@ -214,14 +250,12 @@ def run_train_with_noise(
             "student_random_input",
             "untrained_same_input",
             "untrained_random_input",
+            "lm_same_input",
+            "lm_random_input",
         ],
     )
 
-    return (
-        losses,
-        unpertubed_pred_data,
-        student_network.get_checkpoint(),
-    )
+    return (losses, unpertubed_pred_data, student_network.get_checkpoint(), scaler)
 
 
 @click.command()
@@ -258,15 +292,20 @@ def main(config_path):
 
         config["pkn_path"] = sim_config["pkn_path"]
 
-        losses, unpertubed_data, student = run_train_with_noise(**config)
+        losses, unpertubed_data, student, scaler = run_train_with_noise(**config)
 
         losses.to_csv(f"{out_dir}{i+1}_losses.csv")
         unpertubed_data.to_csv(f"{out_dir}{i+1}_unperturbed.csv")
 
         torch.save({"model_state_dict": student}, f"{out_dir}{i+1}_student.pt")
 
+        del student
+
         with open(f"{out_dir}{i+1}_config.json", "w") as f:
             json.dump(config, f)
+
+        with open(f"{out_dir}{i+1}_scaler.json", "wb") as f:
+            pickle.dump(scaler, f)
 
 
 if __name__ == "__main__":
