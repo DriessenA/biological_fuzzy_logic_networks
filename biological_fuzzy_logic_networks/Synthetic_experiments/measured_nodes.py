@@ -9,52 +9,39 @@ import os
 import pickle
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.linear_model import LinearRegression
+from random import sample
 
 
-def load_and_prepare_data(
-    data_dir,
-    noise_sd,
-    add_noise_to_input_train,
-    add_noise_to_y_train,
-    add_noise_to_input_test,
-    add_noise_to_y_test,
-):
+def load_and_prepare_data(data_dir, n_nodes_measured: int):
     train_true_df = pd.read_csv(f"{data_dir}/train_true_df.csv")
     train_input_df = pd.read_csv(f"{data_dir}/train_input_df.csv")
     test_true_df = pd.read_csv(f"{data_dir}/test_true_df.csv")
     test_input_df = pd.read_csv(f"{data_dir}/test_input_df.csv")
 
-    if add_noise_to_y_train:
-        # Add noise to training data (and test data?)
-        train_input_noise = np.random.normal(0, noise_sd, train_input_df.shape)
-        train_input_df = train_input_df + train_input_noise
+    all_downstream_nodes = list(train_true_df.columns)
+    selected_nodes = sample(all_downstream_nodes, n_nodes_measured)
+    all_nodes = all_downstream_nodes + list(train_input_df.columns)
 
-    if add_noise_to_y_train:
-        # Add noise to training data (and test data?)
-        train_noise = np.random.normal(0, noise_sd, train_true_df.shape)
-        train_true_df = train_true_df + train_noise
+    print(selected_nodes)
 
-    if add_noise_to_input_test:
-        # Add noise to test data
-        input_noise = np.random.normal(0, noise_sd, test_input_df.shape)
-        test_input_df = test_input_df + input_noise
+    train_true_df = train_true_df[selected_nodes]
+    test_true_df = test_true_df[selected_nodes]
 
-    if add_noise_to_y_test:
-        test_noise = np.random.normal(0, noise_sd, test_true_df.shape)
-        test_true_df = test_true_df + test_noise
-
-    return train_true_df, train_input_df, test_true_df, test_input_df
+    return (
+        train_true_df,
+        train_input_df,
+        test_true_df,
+        test_input_df,
+        selected_nodes,
+        all_nodes,
+    )
 
 
-def run_train_with_noise(
+def run_train_measured_nodes(
     pkn_path,
     data_dir,
+    n_nodes_measured: int,
     train_frac: float = 0.7,
-    noise_sd: int = 1,
-    add_noise_to_input_train: bool = False,
-    add_noise_to_y_train: bool = False,
-    add_noise_to_input_test: bool = True,
-    add_noise_to_y_test: bool = False,
     BFN_training_params: dict = {
         "epochs": 100,
         "batch_size": 500,
@@ -72,14 +59,14 @@ def run_train_with_noise(
     )
 
     # Get data with/without noise
-    train_true_df, train_input_df, test_true_df, test_input_df = load_and_prepare_data(
-        data_dir=data_dir,
-        add_noise_to_input_train=add_noise_to_input_train,
-        add_noise_to_y_train=add_noise_to_y_train,
-        add_noise_to_input_test=add_noise_to_input_test,
-        add_noise_to_y_test=add_noise_to_y_test,
-        noise_sd=noise_sd,
-    )
+    (
+        train_true_df,
+        train_input_df,
+        test_true_df,
+        test_input_df,
+        selected_nodes,
+        all_nodes,
+    ) = load_and_prepare_data(data_dir=data_dir, n_nodes_measured=n_nodes_measured)
     test_size = len(test_true_df)
 
     # Train student on unperturbed training data
@@ -130,9 +117,9 @@ def run_train_with_noise(
     train_dict = {c: torch.Tensor(np.array(all_train[c])) for c in all_train.columns}
     val_dict = {c: torch.Tensor(np.array(all_val[c])) for c in all_val.columns}
 
-    # Inhibitors
-    train_inhibitors = {c: torch.ones(train_size) for c in train_dict.keys()}
-    val_inhibitors = {c: torch.ones(val_size) for c in val_dict.keys()}
+    # Inhibitors, no inhibition
+    train_inhibitors = {c: torch.ones(train_size) for c in all_nodes}
+    val_inhibitors = {c: torch.ones(val_size) for c in all_nodes}
 
     student_network.initialise_random_truth_and_output(
         train_size, to_cuda=BFN_training_params["tensors_to_cuda"]
@@ -255,7 +242,13 @@ def run_train_with_noise(
         ],
     )
 
-    return (losses, unpertubed_pred_data, student_network.get_checkpoint(), scaler)
+    return (
+        losses,
+        unpertubed_pred_data,
+        student_network.get_checkpoint(),
+        scaler,
+        selected_nodes,
+    )
 
 
 @click.command()
@@ -265,17 +258,7 @@ def main(config_path):
         config = json.load(f)
     f.close()
 
-    out_dir = f"{config['out_dir']}/Error_sd_{config['noise_sd']}/"
-    subdir = []
-    if config["add_noise_to_input_train"]:
-        subdir.append("tri")
-    if config["add_noise_to_y_train"]:
-        subdir.append("try")
-    if config["add_noise_to_input_test"]:
-        subdir.append("tei")
-    if config["add_noise_to_y_test"]:
-        subdir.append("tey")
-    out_dir = out_dir + "_".join(subdir) + "/"
+    out_dir = f"{config['out_dir']}/"
 
     try:
         os.mkdir(out_dir)
@@ -285,14 +268,16 @@ def main(config_path):
     base_data_dir = config["data_dir"]
 
     for i in range(5):
-
-        config["data_dir"] = base_data_dir + str((i + 1)) + "/"
+        print(i + 1)
+        config["data_dir"] = base_data_dir + str(i + 1)
         with open(f"{config['data_dir']}/config.json") as f:
             sim_config = json.load(f)
 
         config["pkn_path"] = sim_config["pkn_path"]
 
-        losses, unpertubed_data, student, scaler = run_train_with_noise(**config)
+        losses, unpertubed_data, student, scaler, selected_nodes = (
+            run_train_measured_nodes(**config)
+        )
 
         losses.to_csv(f"{out_dir}{i+1}_losses.csv")
         unpertubed_data.to_csv(f"{out_dir}{i+1}_unperturbed.csv")
@@ -306,6 +291,9 @@ def main(config_path):
 
         with open(f"{out_dir}{i+1}_scaler.json", "wb") as f:
             pickle.dump(scaler, f)
+
+        with open(f"{out_dir}{i+1}_selected_nodes.json", "wb") as f:
+            pickle.dump(selected_nodes, f)
 
 
 if __name__ == "__main__":

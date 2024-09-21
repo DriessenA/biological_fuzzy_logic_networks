@@ -56,9 +56,9 @@ rng = np.random.default_rng(2)
 RMSE_df = pd.DataFrame(index=simulated_data.columns)
 test_set_df = pd.DataFrame(index=["test_1", "test_2", "test_3", "test_4", "test_5"])
 if args.type == "fuzz":
-    BFZ = DREAMBioFuzzNet.build_DREAMBioFuzzNet_from_file(args.model)
+    BFZ = DREAMBioFuzzNet.build_DREAMBioFuzzNet_from_file(args.model, n=1.1, K=1)
 elif args.type == "mix":
-    BFZ = biomixnet.BioMixNet.build_BuiMixNet_from_file(args.model)
+    BFZ = biomixnet.BioMixNet.build_BuiMixNet_from_file(args.model, n=1.1, K=1)
 else:
     ValueError(f"Unknown type {args.type}")
 BFZ_params = utils.obtain_params(BFZ)[0]
@@ -69,9 +69,9 @@ for fold in range(args.foldnum):
     print(f"Currently running fold {fold}")
     if args.type == "fuzz":
         print("Creating new model")
-        BFZ = DREAMBioFuzzNet.build_DREAMBioFuzzNet_from_file(args.model)
+        BFZ = DREAMBioFuzzNet.build_DREAMBioFuzzNet_from_file(args.model, n=1.1, K=1)
     elif args.type == "mix":
-        BFZ = biomixnet.BioMixNet.build_BuiMixNet_from_file(args.model)
+        BFZ = biomixnet.BioMixNet.build_BuiMixNet_from_file(args.model, n=1.1, K=1)
     else:
         ValueError(f"Unknown type {args.type}")
 

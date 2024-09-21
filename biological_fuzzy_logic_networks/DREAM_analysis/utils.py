@@ -286,12 +286,14 @@ def cl_data_to_input(
             raise Warning("Scaler provided, ignoring `scale type`")
         train[markers] = scaler.transform(train[markers])
         t = train[markers]
-        t[t < 0] = 0
+        t[t < 0] = 1e-9
+        t[t > 1] = 1
         train[markers] = t
         if valid is not None:
             valid[markers] = scaler.transform(valid[markers])
             t = valid[markers]
-            t[t < 0] = 0
+            t[t < 0] = 1e-9
+            t[t > 1] = 1
             valid[markers] = t
     elif not scaler and scale_type:
         scaler = get_scaler(scale_type)
@@ -300,7 +302,8 @@ def cl_data_to_input(
         if valid is not None:
             valid[markers] = scaler.transform(valid[markers])
             t = valid[markers]
-            t[t < 0] = 0
+            t[t < 0] = 1e-9
+            t[t > 1] = 1
             valid[markers] = t
 
     if add_root_values:

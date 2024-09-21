@@ -13,6 +13,8 @@ default_hex = [
     "#5BD527",  # Green
     "#933CEE",  # Purple
     "#C84A8D",  # Pink
+    "#636363",  # DarkGrey
+    "#B7B7B7",  # LightGrey
 ]
 
 default_colors = {
@@ -24,6 +26,8 @@ default_colors = {
     "green": "#5BD527",
     "purple": "#933CEE",
     "pink": "#C84A8D",
+    "darkgrey": "#636363",
+    "lightgrey": "#B7B7B7",
 }
 
 perturbation_models_dict = {
@@ -42,4 +46,6 @@ models_dict = {
     "teacher_random_input": "#0072B2",  # Blue
     "untrained_same_input": "#C84A8D",  # Pink
     "untrained_random_input": "#933CEE",  # Purple
+    "lm_same_input": default_colors["lightgrey"],  # Pink
+    "lm_random_input": default_colors["darkgrey"],  # Purple
 }

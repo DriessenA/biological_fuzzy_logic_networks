@@ -7,6 +7,7 @@ import networkx as nx
 import pandas as pd
 import torch as torch
 from tqdm.autonotebook import tqdm
+from torch.distributions.uniform import Uniform
 
 from biological_fuzzy_logic_networks.DREAM.DREAMdataset import DREAMBioFuzzDataset
 from biological_fuzzy_logic_networks.biofuzznet import BioFuzzNet
@@ -14,11 +15,18 @@ from biological_fuzzy_logic_networks.utils import MSE_loss, read_sif, MSE_entrop
 from biological_fuzzy_logic_networks.utils import has_cycle
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(device)
 
 
 class DREAMMixIn:
     # Setter Methods
-    def initialise_random_truth_and_output(self, batch_size, to_cuda: bool = False):
+    def initialise_random_truth_and_output(
+        self,
+        batch_size,
+        distribution: torch.distributions.distribution.Distribution = Uniform(
+            torch.tensor([0.0]), torch.tensor([1.0])
+        ),
+    ):
         """
         Initialises the network so that the output_state and ground_truth are set to random tensors.
         Args:
@@ -29,17 +37,41 @@ class DREAMMixIn:
         for node_name in self.nodes():
             node = self.nodes()[node_name]
             if node["node_type"] == "biological":
-                node["ground_truth"] = torch.rand(batch_size)
-                node["output_state"] = torch.rand(batch_size)
+                sample1 = distribution.sample(torch.Size([batch_size]))
+                sample2 = distribution.sample(torch.Size([batch_size]))
+
+                sample1[(sample1 < 0)] = 0
+                sample1[(sample1 > 1)] = 1
+
+                sample2[(sample2 < 0)] = 0
+                sample2[(sample2 > 1)] = 1
+
+                node["ground_truth"] = sample1.reshape(
+                    [
+                        batch_size,
+                    ]
+                )
+                node["output_state"] = sample2.reshape(
+                    [
+                        batch_size,
+                    ]
+                )
             else:
-                node["output_state"] = torch.rand(batch_size)
+                sample = distribution.sample(torch.Size([batch_size]))
 
-            if to_cuda:
-                node["output_state"] = node["output_state"].to(device)
-                if node["node_type"] == "biological":
-                    node["ground_truth"] = node["ground_truth"].to(device)
+                sample[(sample < 0)] = 0
+                sample[(sample > 1)] = 1
+                node["output_state"] = sample.reshape(
+                    [
+                        batch_size,
+                    ]
+                )
 
-    def set_network_ground_truth(self, ground_truth, to_cuda: bool = False):
+            node["output_state"] = node["output_state"].to(device)
+            if node["node_type"] == "biological":
+                node["ground_truth"] = node["ground_truth"].to(device)
+
+    def set_network_ground_truth(self, ground_truth):
         """
         Set the ground_truth of each biological node. Throws a warning for each biological node
         in the BioFuzzNet that is not observed
@@ -62,21 +94,13 @@ class DREAMMixIn:
                 if (
                     len(parents) > 0
                 ):  # If the node has a parent (ie is not an input node for which we for sure have the ground truth as prediction)
-                    if to_cuda:
-                        node["ground_truth"] = ground_truth[node_name].to(device)
-                    else:
-                        node["ground_truth"] = ground_truth[node_name]
+                    node["ground_truth"] = ground_truth[node_name].to(device)
+
                 else:
-                    if to_cuda:
-                        node["ground_truth"] = ground_truth[node_name].to(device)
-                        node["output_state"] = ground_truth[node_name].to(
-                            device
-                        )  # A root node does not need to be predicted
-                    else:
-                        node["ground_truth"] = ground_truth[node_name]
-                        node["output_state"] = ground_truth[
-                            node_name
-                        ]  # A root node does not need to be predicted
+                    node["ground_truth"] = ground_truth[node_name].to(device)
+                    node["output_state"] = ground_truth[node_name].to(
+                        device
+                    )  # A root node does not need to be predicted
 
     def propagate_along_edge(self, edge: tuple, inhibition) -> torch.Tensor:
         """
@@ -96,7 +120,6 @@ class DREAMMixIn:
             state_to_propagate = self.nodes[edge[0]]["output_state"]
             return state_to_propagate
         elif self.edges()[edge]["edge_type"] == "transfer_function":
-
             # The preceding state has to go through the Hill layer
             state_to_propagate = self.edges()[edge]["layer"](
                 self.nodes[edge[0]]["output_state"]
@@ -110,9 +133,7 @@ class DREAMMixIn:
             state_to_propagate = state_to_propagate / inhibition[edge[0]]
         return state_to_propagate
 
-    def integrate_NOT(
-        self, node: str, inhibition, to_cuda: bool = False
-    ) -> torch.Tensor:
+    def integrate_NOT(self, node: str, inhibition) -> torch.Tensor:
         """
         Computes the NOT operation at a NOT gate
 
@@ -132,8 +153,7 @@ class DREAMMixIn:
             )
             ones = torch.ones(state_to_integrate.size())
 
-            if to_cuda:
-                ones = ones.to(device)
+            ones = ones.to(device)
 
             result = ones - state_to_integrate
             # TODO check if this is reasonable
@@ -206,9 +226,7 @@ class DREAMMixIn:
         # result[ones] = 1
         return result
 
-    def integrate_logical_node(
-        self, node: str, inhibition, to_cuda: bool = False
-    ) -> torch.Tensor:
+    def integrate_logical_node(self, node: str, inhibition) -> torch.Tensor:
         """
         A wrapper around integrate_NOT, integrate_OR and integrate_AND to integrate the values
         at any logical node independently of the gate.
@@ -224,7 +242,7 @@ class DREAMMixIn:
         if self.nodes[node]["node_type"] == "logic_gate_OR":
             return self.integrate_OR(node=node, inhibition=inhibition)
         if self.nodes[node]["node_type"] == "logic_gate_NOT":
-            return self.integrate_NOT(node=node, inhibition=inhibition, to_cuda=to_cuda)
+            return self.integrate_NOT(node=node, inhibition=inhibition)
         else:
             raise NameError(f"{node} is not a known logic gate.")
 
@@ -247,7 +265,7 @@ class DREAMMixIn:
         else:  # For a root edge
             return self.nodes()[node]["ground_truth"]
 
-    def update_fuzzy_node(self, node: str, inhibition, to_cuda: bool = False) -> None:
+    def update_fuzzy_node(self, node: str, inhibition) -> None:
         """
         A wrapper to call the correct updating function depending on the type of the node.
         Args:
@@ -261,7 +279,7 @@ class DREAMMixIn:
             )
         else:
             self.nodes()[node]["output_state"] = self.integrate_logical_node(
-                node=node, inhibition=inhibition, to_cuda=to_cuda
+                node=node, inhibition=inhibition
             )
 
     def update_one_timestep_cyclic_network(
@@ -270,7 +288,6 @@ class DREAMMixIn:
         inhibition,
         loop_status,
         convergence_check=False,
-        to_cuda: bool = False,
     ) -> Optional[dict]:
         """
         Does the sequential update of a directed cyclic graph over one timestep: ie updates each node in the network only once.
@@ -322,7 +339,7 @@ class DREAMMixIn:
                     # Then we reappend the current visited node
                     current_nodes.append(curr_node)
                 else:  # Here we can update
-                    self.update_fuzzy_node(curr_node, inhibition, to_cuda=to_cuda)
+                    self.update_fuzzy_node(curr_node, inhibition)
                     non_updated_nodes.remove(curr_node)
                     cont = True
                     while cont:
@@ -340,7 +357,7 @@ class DREAMMixIn:
             return None
 
     def sequential_update(
-        self, input_nodes, inhibition, convergence_check=False, to_cuda: bool = False
+        self, input_nodes, inhibition, convergence_check=False
     ) -> Optional[dict]:
         """
         Update the graph by propagating the signal from root node (or given input node)
@@ -363,8 +380,7 @@ class DREAMMixIn:
                 "convergence_check has been set to True. All simulation states will be saved and returned. This has not been optimised for memory usage and is implemented in a naive manner. Proceed with caution."
             )
 
-        if to_cuda:
-            inhibition = {k: v.to(device) for k, v in inhibition.items()}
+        inhibition = {k: v.to(device) for k, v in inhibition.items()}
 
         states = {}
         loop_status = has_cycle(self)
@@ -395,7 +411,7 @@ class DREAMMixIn:
                         current_nodes.append(curr_node)
                     # If all parents are updated, then we update
                     else:
-                        self.update_fuzzy_node(curr_node, inhibition, to_cuda=to_cuda)
+                        self.update_fuzzy_node(curr_node, inhibition)
 
                         non_updated_nodes.remove(curr_node)
                         cont = True
@@ -420,7 +436,6 @@ class DREAMMixIn:
                     inhibition,
                     loop_status,
                     convergence_check,
-                    to_cuda=to_cuda,
                 )
             last_states = {}
             for i in range(int(length)):
@@ -429,7 +444,6 @@ class DREAMMixIn:
                     inhibition,
                     loop_status,
                     convergence_check,
-                    to_cuda=to_cuda,
                 )
                 last_states[i] = {
                     n: self.nodes()[n]["output_state"] for n in self.nodes()
@@ -463,7 +477,6 @@ class DREAMMixIn:
         convergence_check: bool = False,
         save_checkpoint: bool = True,
         checkpoint_path: str = None,
-        tensors_to_cuda: bool = False,
         patience: int = 20,
     ):
         """
@@ -506,23 +519,22 @@ class DREAMMixIn:
         else:
             input_nodes = self.root_nodes
 
-        if tensors_to_cuda:
-            for node_key, node_tensor in input.items():
-                input[node_key] = node_tensor.to(device)
-            for node_key, node_tensor in valid_input.items():
-                valid_input[node_key] = node_tensor.to(device)
-            for node_key, node_tensor in ground_truth.items():
-                ground_truth[node_key] = node_tensor.to(device)
-            for node_key, node_tensor in valid_ground_truth.items():
-                valid_ground_truth[node_key] = node_tensor.to(device)
-            for node_key, node_tensor in train_inhibitors.items():
-                train_inhibitors[node_key] = node_tensor.to(device)
-            for node_key, node_tensor in valid_inhibitors.items():
-                valid_inhibitors[node_key] = node_tensor.to(device)
+        for node_key, node_tensor in input.items():
+            input[node_key] = node_tensor.to(device)
+        for node_key, node_tensor in valid_input.items():
+            valid_input[node_key] = node_tensor.to(device)
+        for node_key, node_tensor in ground_truth.items():
+            ground_truth[node_key] = node_tensor.to(device)
+        for node_key, node_tensor in valid_ground_truth.items():
+            valid_ground_truth[node_key] = node_tensor.to(device)
+        for node_key, node_tensor in train_inhibitors.items():
+            train_inhibitors[node_key] = node_tensor.to(device)
+        for node_key, node_tensor in valid_inhibitors.items():
+            valid_inhibitors[node_key] = node_tensor.to(device)
 
-            # Transfer edges (model) to cuda
-            for edge in self.transfer_edges:
-                self.edges()[edge]["layer"].to(device)
+        # Transfer edges (model) to cuda
+        for edge in self.transfer_edges:
+            self.edges()[edge]["layer"].to(device)
 
         # Instantiate the dataset
         dataset = DREAMBioFuzzDataset(input, ground_truth, train_inhibitors)
@@ -548,15 +560,13 @@ class DREAMMixIn:
         train_loss_running_mean = None
         for e in epoch_pbar:
             # Instantiate the model
-            self.initialise_random_truth_and_output(batch_size, to_cuda=tensors_to_cuda)
+            self.initialise_random_truth_and_output(batch_size)
             for X_batch, y_batch, inhibited_batch in dataloader:
 
                 # In this case we do not use X_batch explicitly, as we just need the ground truth state of each node.
                 # Reinitialise the network at the right size
                 batch_keys = list(X_batch.keys())
-                self.initialise_random_truth_and_output(
-                    len(X_batch[batch_keys.pop()]), to_cuda=tensors_to_cuda
-                )
+                self.initialise_random_truth_and_output(len(X_batch[batch_keys.pop()]))
                 # predict and compute the loss
                 self.set_network_ground_truth(ground_truth=y_batch)
                 # Simulate
@@ -564,7 +574,6 @@ class DREAMMixIn:
                     input_nodes,
                     inhibited_batch,
                     convergence_check=convergence_check,
-                    to_cuda=tensors_to_cuda,
                 )
 
                 # Get the predictions
@@ -613,16 +622,11 @@ class DREAMMixIn:
             with torch.no_grad():
                 # Instantiate the model
                 self.initialise_random_truth_and_output(
-                    len(
-                        valid_ground_truth[input_nodes[0]],
-                    ),
-                    to_cuda=tensors_to_cuda,
+                    len(valid_ground_truth[input_nodes[0]])
                 )
                 self.set_network_ground_truth(ground_truth=valid_ground_truth)
                 # Simulation
-                self.sequential_update(
-                    input_nodes, valid_inhibitors, to_cuda=tensors_to_cuda
-                )
+                self.sequential_update(input_nodes, valid_inhibitors)
                 # Get the predictions
                 predictions = {
                     k: v for k, v in self.output_states.items() if k not in input_nodes
@@ -685,7 +689,7 @@ class DREAMMixIn:
                             )
 
                             pred_df = pd.DataFrame(
-                                {k: v.numpy() for k, v in predictions.items()}
+                                {k: v.cpu().numpy() for k, v in predictions.items()}
                             )
                             pred_df.to_csv(
                                 f"{checkpoint_path}predictions_with_model_save.csv"
@@ -707,7 +711,9 @@ class DREAMMixIn:
                     f"{checkpoint_path}model.pt",
                 )
 
-                pred_df = pd.DataFrame({k: v.numpy() for k, v in predictions.items()})
+                pred_df = pd.DataFrame(
+                    {k: v.cpu().numpy() for k, v in predictions.items()}
+                )
                 pred_df.to_csv(f"{checkpoint_path}predictions_with_model_save.csv")
 
         if convergence_check:
@@ -724,7 +730,7 @@ class DREAMMixIn:
         )
         module_dict.load_state_dict(model_state_dict)
         edge_att = {
-            (k.split("@@@")[0], k.split("@@@")[1]): {"layer": v}
+            (k.split("@@@")[0], k.split("@@@")[1]): {"layer": v.to(device)}
             for k, v in module_dict.items()
         }
         nx.set_edge_attributes(self, edge_att)
@@ -758,11 +764,13 @@ class DREAMMixIn:
 
 
 class DREAMBioFuzzNet(DREAMMixIn, BioFuzzNet):
-    def __init__(self, nodes=None, edges=None):
-        super(DREAMBioFuzzNet, self).__init__(nodes, edges)
+    def __init__(self, nodes=None, edges=None, n=2, K=0.5):
+        super(DREAMBioFuzzNet, self).__init__(nodes, edges, n=n, K=K)
 
     @classmethod
-    def build_DREAMBioFuzzNet_from_file(cls, filepath: str):
+    def build_DREAMBioFuzzNet_from_file(
+        cls, filepath: str, n: float = 2.0, K: float = 0.5
+    ):
         """
         An alternate constructor to build the BioFuzzNet from the sif file instead of the lists of nodes and edges.
         AND gates should already be specified in the sif file, and should be named node1_and_node2 where node1 and node2 are the incoming nodes
@@ -774,12 +782,12 @@ class DREAMBioFuzzNet(DREAMMixIn, BioFuzzNet):
 
         """
         nodes, edges = read_sif(filepath)
-        return DREAMBioFuzzNet(nodes, edges)
+        return DREAMBioFuzzNet(nodes, edges, n=n, K=K)
 
 
 class DREAMBioMixNet(DREAMMixIn, BioFuzzNet):
-    def __init__(self, nodes=None, edges=None, AND_param: float = 0.0):
-        super(DREAMBioMixNet, self).__init__(nodes, edges)
+    def __init__(self, nodes=None, edges=None, AND_param: float = 0.0, n=2, K=0.5):
+        super(DREAMBioMixNet, self).__init__(nodes, edges, n=n, K=K)
 
         for node in self.nodes():
             if self.nodes()[node]["node_type"] in ["logic_gate_AND", "logic_gate_OR"]:
@@ -791,7 +799,7 @@ class DREAMBioMixNet(DREAMMixIn, BioFuzzNet):
                 )
 
     @classmethod
-    def build_DREAMBioMixNet_from_file(cls, filepath: str):
+    def build_DREAMBioMixNet_from_file(cls, filepath: str, n=2, K=0.5):
         """
         An alternate constructor to build the BioFuzzNet from the sif file instead of the lists of nodes and edges.
         AND gates should already be specified in the sif file, and should be named node1_and_node2 where node1 and node2 are the incoming nodes
@@ -803,7 +811,7 @@ class DREAMBioMixNet(DREAMMixIn, BioFuzzNet):
 
         """
         nodes, edges = read_sif(filepath)
-        return DREAMBioMixNet(nodes, edges)
+        return DREAMBioMixNet(nodes, edges, n=n, K=K)
 
     @property
     def mixed_gates(self):
@@ -853,9 +861,7 @@ class DREAMBioMixNet(DREAMMixIn, BioFuzzNet):
                 OR_function=self.integrate_OR,
             )
 
-    def integrate_logical_node(
-        self, node: str, inhibition, to_cuda: bool = False
-    ) -> torch.Tensor:
+    def integrate_logical_node(self, node: str, inhibition) -> torch.Tensor:
         """
         A wrapper around integrate_NOT, and the MixedGate layer to integrate the different logical nodes.
         Args:
@@ -890,7 +896,6 @@ class DREAMBioMixNet(DREAMMixIn, BioFuzzNet):
         logger=None,
         save_checkpoint: bool = True,
         checkpoint_path: str = None,
-        tensors_to_cuda: bool = False,
         patience: int = 5,
         loss_weights: float = None,
         mixed_gates_regularisation: float = 1.0,
@@ -935,25 +940,24 @@ class DREAMBioMixNet(DREAMMixIn, BioFuzzNet):
         else:
             input_nodes = self.root_nodes
 
-        if tensors_to_cuda:
-            for node_key, node_tensor in input.items():
-                input[node_key] = node_tensor.to(device)
-            for node_key, node_tensor in valid_input.items():
-                valid_input[node_key] = node_tensor.to(device)
-            for node_key, node_tensor in ground_truth.items():
-                ground_truth[node_key] = node_tensor.to(device)
-            for node_key, node_tensor in valid_ground_truth.items():
-                valid_ground_truth[node_key] = node_tensor.to(device)
-            for node_key, node_tensor in train_inhibitors.items():
-                train_inhibitors[node_key] = node_tensor.to(device)
-            for node_key, node_tensor in valid_inhibitors.items():
-                valid_inhibitors[node_key] = node_tensor.to(device)
+        for node_key, node_tensor in input.items():
+            input[node_key] = node_tensor.to(device)
+        for node_key, node_tensor in valid_input.items():
+            valid_input[node_key] = node_tensor.to(device)
+        for node_key, node_tensor in ground_truth.items():
+            ground_truth[node_key] = node_tensor.to(device)
+        for node_key, node_tensor in valid_ground_truth.items():
+            valid_ground_truth[node_key] = node_tensor.to(device)
+        for node_key, node_tensor in train_inhibitors.items():
+            train_inhibitors[node_key] = node_tensor.to(device)
+        for node_key, node_tensor in valid_inhibitors.items():
+            valid_inhibitors[node_key] = node_tensor.to(device)
 
-            # Transfer edges (model) to cuda
-            for edge in self.transfer_edges:
-                self.edges()[edge]["layer"].to(device)
-            for gate in self.mixed_gates:
-                gate = self.nodes[gate]["gate"].to(device)
+        # Transfer edges (model) to cuda
+        for edge in self.transfer_edges:
+            self.edges()[edge]["layer"].to(device)
+        for gate in self.mixed_gates:
+            gate = self.nodes[gate]["gate"].to(device)
 
         # Instantiate the dataset
         dataset = DREAMBioFuzzDataset(input, ground_truth, train_inhibitors)
@@ -990,18 +994,14 @@ class DREAMBioMixNet(DREAMMixIn, BioFuzzNet):
             # Instantiate the model
             for X_batch, y_batch, inhibited_batch in dataloader:
                 # In this case we do not use X_batch explicitly, as we just need the ground truth state of each node.
-                self.initialise_random_truth_and_output(
-                    batch_size, to_cuda=tensors_to_cuda
-                )
+                self.initialise_random_truth_and_output(batch_size)
                 # Reinitialise the network at the right size
 
                 # predict and compute the loss
                 self.set_network_ground_truth(ground_truth=y_batch)
 
                 # Simulate
-                self.sequential_update(
-                    input_nodes, inhibited_batch, to_cuda=tensors_to_cuda
-                )
+                self.sequential_update(input_nodes, inhibited_batch)
 
                 # Get the predictions
                 predictions = {
@@ -1053,14 +1053,11 @@ class DREAMBioMixNet(DREAMMixIn, BioFuzzNet):
                 self.initialise_random_truth_and_output(
                     len(
                         valid_ground_truth[input_nodes[0]],
-                    ),
-                    to_cuda=tensors_to_cuda,
+                    )
                 )
                 self.set_network_ground_truth(ground_truth=valid_ground_truth)
                 # Simulation
-                self.sequential_update(
-                    input_nodes, valid_inhibitors, to_cuda=tensors_to_cuda
-                )
+                self.sequential_update(input_nodes, valid_inhibitors)
                 # Get the predictions
                 predictions = {
                     k: v for k, v in self.output_states.items() if k not in input_nodes
@@ -1142,7 +1139,7 @@ class DREAMBioMixNet(DREAMMixIn, BioFuzzNet):
                             )
 
                             pred_df = pd.DataFrame(
-                                {k: v.numpy() for k, v in predictions.items()}
+                                {k: v.cpu().numpy() for k, v in predictions.items()}
                             )
                             pred_df.to_csv(
                                 f"{checkpoint_path}predictions_with_model_save.csv"
@@ -1161,7 +1158,9 @@ class DREAMBioMixNet(DREAMMixIn, BioFuzzNet):
                     f"{checkpoint_path}model.pt",
                 )
 
-                pred_df = pd.DataFrame({k: v.numpy() for k, v in predictions.items()})
+                pred_df = pd.DataFrame(
+                    {k: v.cpu().numpy() for k, v in predictions.items()}
+                )
                 pred_df.to_csv(f"{checkpoint_path}predictions_with_model_save.csv")
 
         return losses, curr_best_val_loss
