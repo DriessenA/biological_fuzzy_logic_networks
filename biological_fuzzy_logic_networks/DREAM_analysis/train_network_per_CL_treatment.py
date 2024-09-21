@@ -5,7 +5,6 @@ from biological_fuzzy_logic_networks.DREAM_analysis.utils import (
 )
 import pandas as pd
 from typing import List, Union, Sequence
-from app_tunnel.apps import mlflow_tunnel
 from sklearn.metrics import r2_score
 import mlflow
 import click
@@ -13,6 +12,8 @@ import json
 import torch
 import pickle as pickle
 import os
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def get_environ_var(env_var_name, fail_gracefully=True):
@@ -135,10 +136,20 @@ def train_network(
         ).reset_index("time", drop=False)
         loop_states_to_save.to_csv(f"{output_dir}loop_states.csv")
 
+        # Save outputs
+    with open(f"{output_dir}scaler.pkl", "wb") as f:
+        pickle.dump(scaler, f)
+    loss.to_csv(f"{output_dir}loss.csv")
+    train.to_csv(f"{output_dir}train_data.csv")
+    valid.to_csv(f"{output_dir}valid_data.csv")
+    pd.DataFrame(train_inhibitors).to_csv(f"{output_dir}train_inhibitors.csv")
+    pd.DataFrame(valid_inhibitors).to_csv(f"{output_dir}valid_inhibitors.csv")
+
     # Load best model and evaluate:
     ckpt = torch.load(f"{checkpoint_path}/model.pt")
     model = create_bfz(pkn_sif, network_class)
     model.load_from_checkpoint(ckpt["model_state_dict"])
+    valid_inhibitors = {k: v.to(device) for k, v in valid_inhibitors.items()}
     with torch.no_grad():
         model.initialise_random_truth_and_output(len(valid))
         model.set_network_ground_truth(valid_data)
@@ -147,24 +158,7 @@ def train_network(
             {k: v.numpy() for k, v in model.output_states.items()}
         )
 
-    # Vaidation performance
-    node_r2_scores = {}
-    for node in valid_data.keys():
-        node_r2_scores[f"val_r2_{node}"] = r2_score(
-            valid[node], val_output_states[node]
-        )
-    # mlflow.log_metric("best_val_loss", best_val_loss)
-    # mlflow.log_metrics(node_r2_scores)
-
-    # Save outputs
-    with open(f"{output_dir}scaler.pkl", "wb") as f:
-        pickle.dump(scaler, f)
     val_output_states.to_csv(f"{output_dir}valid_output_states.csv")
-    loss.to_csv(f"{output_dir}loss.csv")
-    train.to_csv(f"{output_dir}train_data.csv")
-    valid.to_csv(f"{output_dir}valid_data.csv")
-    pd.DataFrame(train_inhibitors).to_csv(f"{output_dir}train_inhibitors.csv")
-    pd.DataFrame(valid_inhibitors).to_csv(f"{output_dir}valid_inhibitors.csv")
 
 
 @click.command()
