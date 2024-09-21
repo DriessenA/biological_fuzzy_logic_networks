@@ -1,6 +1,0 @@
-{
-    "pkn_path" : "/dccstor/ipc1/CAR/BFN/LiverDREAM_PKN.sif",
-    "out_dir": "/dccstor/ipc1/CAR/BFN/Model/Scaling/SimData/",
-    "train_size": 10000000,
-    "test_size":500
-    }
